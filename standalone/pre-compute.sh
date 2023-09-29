@@ -1,24 +1,24 @@
 #!/bin/bash
 
-NET=1
-HOSTS=1
-CEPH=1
-REPO=1
-LP1982744=1
+NET=0 # NG adoption provides its own network configuration
+HOSTS=1 # Not really needed
+export CEPH=0 # Not in use currently
+REPO=0 # covered by install_yaml's `make edpm_compute_repos`
+LP1982744=1 # likely needed to fix Tripleo Wallaby Standalone
 TMATE=0
 INSTALL=1
-FILES=1
 EXPORT=1
+export DEUSER=root # or stack, but for Adoption envs it is root atm.
 
-CONTROLLER_IP=192.168.24.2
-COMPUTE_IP=192.168.24.100
+export CONTROLLER_IP=192.168.122.100
+export COMPUTE_IP=192.168.122.101
 
 if [[ $NET -eq 1 ]]; then
     sudo ip addr add $COMPUTE_IP/24 dev eth0
     ip a s eth0
     ping -c 1 $CONTROLLER_IP
     ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-        $CONTROLLER_IP -l stack "uname -a"
+        $CONTROLLER_IP -l $DEUSER "uname -a"
     if [[ ! $? -eq 0 ]]; then
         echo "Cannot ssh into $CONTROLLER_IP"
         exit 1
@@ -30,16 +30,20 @@ if [[ $HOSTS -eq 1 ]]; then
     ENTRY2="$CONTROLLER_IP standalone.ctlplane.localdomain standalone.ctlplane"
     sudo sh -c "echo $ENTRY1 >> /etc/hosts"
     sudo sh -c "echo $ENTRY2 >> /etc/hosts"
+    ENTRY1="$COMPUTE_IP standalone.localdomain standalone"
+    ENTRY2="$COMPUTE_IP compute-0.ctlplane.localdomain compute-0.ctlplane"
+    sudo sh -c "echo $ENTRY1 >> /etc/hosts"
+    sudo sh -c "echo $ENTRY2 >> /etc/hosts"
 fi
 
 if [[ $CEPH -eq 1 ]]; then
     EXT_CEPH="192.168.122.253"
-    ssh $OPT $EXT_CEPH -l stack "ls zed/standalone/ceph_client.yaml"
+    ssh $OPT $EXT_CEPH -l $DEUSER "ls wallaby/standalone/ceph_client.yaml"
     if [[ ! $? -eq 0 ]]; then
         echo "Cannot ssh into $EXT_CEPH"
         exit 1
     fi
-    scp $OPT stack@$EXT_CEPH:/home/stack/zed/standalone/ceph_client.yaml ~/ceph_client.yaml
+    scp $OPT $DEUSER@$EXT_CEPH:~/wallaby/standalone/ceph_client.yaml ~/ceph_client.yaml
     ls -l ~/ceph_client.yaml
 fi
 
@@ -87,14 +91,6 @@ fi
 
 if [[ $INSTALL -eq 1 ]]; then
     sudo dnf install -y ansible-collection-containers-podman python3-tenacity ansible-collection-community-general ansible-collection-ansible-posix
-fi
-
-if [[ $FILES -eq 1 ]]; then
-    # workaround https://paste.opendev.org/show/boSZ8vBqsblPYKKN8ASe/
-    # workaround https://paste.opendev.org/show/bY8SzmXGy0BWV4rWvZRY/
-    pushd /home/stack/ext/tripleo-ansible/tripleo_ansible/playbooks
-    ln -s ../../roles/tripleo_nova_libvirt/files/
-    popd
 fi
 
 if [[ $EXPORT -eq 1 ]]; then

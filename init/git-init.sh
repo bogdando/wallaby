@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # Clones the repos that I am interested in.
 # -------------------------------------------------------
-WALLABY=1
+WALLABY=0 # Tripleo-repos will be using Wallaby. But Tripleo must be Zed
+gerrit_user='bogdando'
+github_user='bogdando'
+git config --global user.email "bdobreli@redhat.com"
+git config --global user.name "Bohdan Dobrelia"
+git config --global push.default simple
+git config --global gitreview.username $gerrit_user
 # -------------------------------------------------------
 if [[ $1 == 'k8s' ]]; then
     pushd ~
-    if [[ ! -d glance-operator ]]; then
-       git clone git@github.com:fultonj/glance-operator.git
-    fi
-    if [[ ! -d cinder-operator ]]; then
-        git clone git@github.com:fultonj/cinder-operator.git
+    if [[ ! -d nova-operator ]]; then
+        git clone git@github.com:$github_user/nova-operator.git
     fi
     popd
     exit 0
@@ -26,28 +29,23 @@ fi
 if [[ $# -eq 0 ]]; then
     # uncomment whatever you want
     declare -a repos=(
-                      # 'openstack/tripleo-heat-templates' \
-		      # 'openstack/tripleo-common'\
-                      # 'openstack/tripleo-ansible' \
-                      # 'openstack/tripleo-validations' \
-                      # 'openstack/python-tripleoclient' \
-                      # 'openstack/ansible-role-chrony' \
-		      # 'openstack-infra/tripleo-ci'\
-		      # 'openstack/tripleo-specs'\
-		      # 'openstack/tripleo-docs'\
-		      # 'openstack/tripleo-quickstart'\
-		      # 'openstack/tripleo-quickstart-extras'\
-		      # 'openstack/tripleo-repos'\
-                      # 'openstack/tripleo-operator-ansible' \
-		      # add the next repo here
+              # 'openstack/tripleo-heat-templates' \
+              # 'openstack/tripleo-common'\
+              'openstack/tripleo-ansible' \
+              # 'openstack/tripleo-validations' \
+              # 'openstack/python-tripleoclient' \
+              # 'openstack/ansible-role-chrony' \
+              # 'openstack-infra/tripleo-ci'\
+              # 'openstack/tripleo-specs'\
+              # 'openstack/tripleo-docs'\
+              # 'openstack/tripleo-quickstart'\
+              # 'openstack/tripleo-quickstart-extras'\
+              # 'openstack/tripleo-repos'\
+              # 'openstack/tripleo-operator-ansible' \
+              # add the next repo here
     );
 fi
 # -------------------------------------------------------
-gerrit_user='fultonj'
-git config --global user.email "fulton@redhat.com"
-git config --global user.name "John Fulton"
-git config --global push.default simple
-git config --global gitreview.username $gerrit_user
 
 git review --version
 if [ $? -gt 0 ]; then
@@ -67,8 +65,9 @@ if [ $? -gt 0 ]; then
         fi
         python3 get-pip.py
     fi
-    pip install git-review tox
 fi
+pip install git-review tox
+
 if [[ $1 == 'ext' ]]; then
     mkdir -p ~/ext
     pushd ~/ext
@@ -78,24 +77,19 @@ fi
 for repo in "${repos[@]}"; do
     dir=$(echo $repo | awk 'BEGIN { FS = "/" } ; { print $2 }')
     if [ ! -d $dir ]; then
-	git clone https://git.openstack.org/$repo.git
-	pushd $dir
-	git remote add gerrit ssh://$gerrit_user@review.openstack.org:29418/$repo.git
-	git review -s
-        if [ $? -gt 0 ]; then
-            echo "Attempting to workaround scp error"
-            cp ~/xena/workarounds/git_review/commit-msg .git/hooks/commit-msg
-            chmod u+x .git/hooks/commit-msg
-        fi
+        git clone https://git.openstack.org/$repo.git
+        pushd $dir
+        git remote add gerrit ssh://$gerrit_user@review.openstack.org:29418/$repo.git
+        git review -s
         if [[ $WALLABY -eq 1 ]]; then
-           git fetch origin
-           git checkout -b wallaby_stable remotes/origin/stable/wallaby
+            git fetch origin
+            git checkout -b wallaby_stable remotes/origin/stable/wallaby
         fi
-	popd
+        popd
     else
-	pushd $dir
-	git pull --ff-only origin master
-	popd
+        pushd $dir
+        git pull --ff-only origin master
+        popd
     fi
 done
 popd
@@ -106,21 +100,10 @@ if [[ $1 == 'ext' ]]; then
     fi
 
     # Install and link chrony
-    pushd /home/stack/ext/ansible-role-chrony
-    git review -d 842223
-    popd
     if [[ ! -d ~/roles ]]; then mkdir ~/roles; fi
     ln -s ~/ext/ansible-role-chrony ~/roles/chrony;
 
-    pushd /home/stack/ext/tripleo-ansible
-    # git review -d 847594
-    curl https://gist.githubusercontent.com/slagle/8fbb18c90d3930a8ca5c5414ee34e78e/raw/a45412851128e7ce06ba388a738680ed42941e5b/gerrit-pull-changes.sh | bash
-    git log  --graph --topo-order  --pretty='format:%h %ai %s%d (%an)' | head -40
-    popd
-    # this seems to get the ~20 patches we need from tripleo-ansible
-    # https://review.opendev.org/q/topic:standalone-roles+project:openstack/tripleo-ansible+status:open
-
     # use eth0, not eth1, for br-ex bridge (neutron_public_interface_name)
-    sed -i /home/stack/ext/tripleo-ansible/tripleo_ansible/inventory/02-computes \
+    sed -i ~/ext/tripleo-ansible/tripleo_ansible/inventory/02-computes \
         -e s/eth1/eth0/g
 fi
